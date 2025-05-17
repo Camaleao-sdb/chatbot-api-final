@@ -12,6 +12,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ✅ CORS fix to allow GitHub Pages access
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
   try {
     // Extract data from request body
     const { learnerText, jimState = 0 } = req.body;
