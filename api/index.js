@@ -7,20 +7,27 @@ const openai = new OpenAI({
 
 // Proper Vercel serverless function export
 export default async function handler(req, res) {
-  // Only allow POST requests
+  // ✅ Add CORS headers for all requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // ✅ Respond to preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Only allow POST beyond this point
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // ✅ CORS fix to allow GitHub Pages access
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
   try {
     // Extract data from request body
     const { learnerText, jimState = 0 } = req.body;
-    
+
     if (!learnerText) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Missing required field: learnerText',
         jimReply: "I can't understand you.",
         jimState: jimState
@@ -69,11 +76,11 @@ Return only valid JSON with this structure:
 
     // Extract response
     const completion = chatResponse.choices[0].message.content;
-    
+
     try {
       const parsed = JSON.parse(completion);
       const validatedState = Math.max(-3, Math.min(3, parsed.jimState));
-      
+
       return res.status(200).json({
         jimReply: parsed.jimReply || "Something went wrong.",
         jimState: validatedState
