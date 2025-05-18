@@ -34,9 +34,9 @@ You are Luana, a tactical advisor debriefing the officer after a negotiation.
 
 Jim’s final message was: "${jimReply}"
 
-Give warm, direct feedback (max 200 characters). Mention one strength and one area to improve.
+Give warm, direct feedback (max 200 characters). Mention one strength and one thing they can improve.
 
-Respond with only a JSON object:
+Respond only as JSON:
 {
   "luanaFeedback": "[brief debrief comment]"
 }
@@ -44,13 +44,15 @@ Respond with only a JSON object:
         userPrompt = `Give the officer final debrief feedback based on Jim’s last message.`;
       } else {
         systemPrompt = `
-You are Luana, a supportive tactical advisor.
+You are Luana, a calm tactical advisor.
 
 Jim just said: "${jimReply}"
 
-Give a short tip (max 200 characters) to help the officer communicate better right now. Speak directly to them like a coach.
+Give a short (max 200 characters) coaching comment to the officer on how to adjust communication right now.
 
-Respond with only a JSON object:
+No scripting or roleplay. Just warm advice.
+
+Respond only as JSON:
 {
   "luanaFeedback": "[brief coaching advice]"
 }
@@ -61,23 +63,25 @@ Respond with only a JSON object:
       systemPrompt = `
 You are Jim Holloway, a distressed man speaking to a police officer.
 
-Start in a neutral state. Respond in 1–2 emotional sentences (under 200 characters).
+Respond in 1–2 emotional sentences (max 200 characters) and return your updated emotional state between -3 and +3.
 
-Update your emotional state based on how the officer speaks:
-- If they show empathy, patience, or validation, respond more positively.
-- If they command, dismiss, or challenge you, respond more negatively.
+✅ If the officer shows empathy, calmness, or validation, your state should improve.
+❌ If they challenge, command, or dismiss you, your state should worsen.
 
-IMPORTANT: Match your reply tone to the score.
-If you sound thankful, your score must increase. If guarded or upset, decrease it.
+IMPORTANT:
+Your emotional score MUST match your reply tone.
+- If you say “thanks” or “okay”, your score must go UP.
+- If you're guarded, upset, or vague, your score must stay same or go down.
 
-Respond in JSON only:
+NEVER mention your emotion score. NEVER say “I’m at +2”.
+
+Return this JSON only:
 {
   "jimReply": "[Jim's short reply]",
-  "jimState": [new number from -3 to 3]
+  "jimState": [number from -3 to 3]
 }
 `;
-
-      userPrompt = `Reply as Jim and update your emotional state to match your tone.`;
+      userPrompt = `Reply as Jim and update your emotional state to reflect the officer’s tone.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -92,9 +96,6 @@ Respond in JSON only:
 
     const completion = chatResponse.choices[0].message.content;
 
-    // Log GPT's raw output so we can debug
-    console.log("🔍 Raw GPT response:", completion);
-
     try {
       const parsed = JSON.parse(completion);
 
@@ -104,7 +105,22 @@ Respond in JSON only:
         });
       }
 
-      const validatedState = Math.max(-3, Math.min(3, parsed.jimState));
+      // 🔍 Enforce tone/score alignment (soft check)
+      const tone = parsed.jimReply?.toLowerCase();
+      let correctedState = parsed.jimState;
+
+      const soundsPositive =
+        tone.includes("thank") ||
+        tone.includes("appreciate") ||
+        tone.includes("okay") ||
+        tone.includes("alright") ||
+        tone.includes("got it");
+
+      if (soundsPositive && correctedState < 1) {
+        correctedState = 1; // ✅ bump up if mismatch
+      }
+
+      const validatedState = Math.max(-3, Math.min(3, correctedState));
 
       return res.status(200).json({
         jimReply: parsed.jimReply || "I'm not sure what to say.",
@@ -114,14 +130,14 @@ Respond in JSON only:
       console.error("❌ JSON parsing error:", parseError, "🧾 GPT Output:", completion);
       return res.status(500).json({
         jimReply: "I'm not sure what to say right now.",
-        jimState: jimState,
+        jimState,
       });
     }
   } catch (error) {
     console.error("❌ API error:", error);
     return res.status(500).json({
       jimReply: "Something went wrong.",
-      jimState: 0,
+      jimState,
     });
   }
 }
