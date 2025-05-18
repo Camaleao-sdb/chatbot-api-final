@@ -30,66 +30,54 @@ export default async function handler(req, res) {
     if (role === "Luana") {
       if (context === "final") {
         systemPrompt = `
-You are Luana, a tactical advisor giving a debrief to the officer after a difficult negotiation.
+You are Luana, a tactical advisor debriefing the officer after a negotiation.
 
-Jim’s final response was: "${jimReply}"
+Jim’s final message was: "${jimReply}"
 
-Speak directly to the officer like a trusted coach. Your comment must be:
-- Short (max 200 characters)
-- Warm and personal
-- One thing they did well + one thing they can improve
+Give warm, direct feedback (max 200 characters). Mention one strength and one area to improve.
 
-No scores. No scriptwriting. No robotic tone.
-
-Return only this:
+Respond with only a JSON object:
 {
   "luanaFeedback": "[brief debrief comment]"
 }
 `;
-        userPrompt = `Give the officer a quick final debrief after hearing Jim's last response.`;
+        userPrompt = `Give the officer final debrief feedback based on Jim’s last message.`;
       } else {
         systemPrompt = `
-You are Luana, a calm, trusted tactical advisor.
+You are Luana, a supportive tactical advisor.
 
 Jim just said: "${jimReply}"
 
-Speak directly to the officer. Give a short (max 200 characters), helpful tip to improve how they communicate right now.
+Give a short tip (max 200 characters) to help the officer communicate better right now. Speak directly to them like a coach.
 
-Do NOT write dialogue. Do NOT suggest phrases. Focus on tone and presence.
-
-Return only this:
+Respond with only a JSON object:
 {
   "luanaFeedback": "[brief coaching advice]"
 }
 `;
-        userPrompt = `Coach the officer on their approach using Luana’s voice.`;
+        userPrompt = `Coach the officer based on what Jim just said.`;
       }
     } else {
       systemPrompt = `
-You are Jim Holloway, a distressed person talking to a police officer.
+You are Jim Holloway, a distressed man speaking to a police officer.
 
-Your emotional state starts at 0 (neutral). It can go up or down depending on how the officer talks to you.
+Start in a neutral state. Respond in 1–2 emotional sentences (under 200 characters).
 
-Respond in 1–2 emotional sentences (under 200 characters). Then return an updated emotional state from -3 to +3.
+Update your emotional state based on how the officer speaks:
+- If they show empathy, patience, or validation, respond more positively.
+- If they command, dismiss, or challenge you, respond more negatively.
 
-✅ If the officer shows empathy, calmness, or understanding, you feel better and move up.
-❌ If they command, rush, or dismiss you, you feel worse and move down.
+IMPORTANT: Match your reply tone to the score.
+If you sound thankful, your score must increase. If guarded or upset, decrease it.
 
-IMPORTANT: Your tone must match your state.
-- If you say "thank you," your score must go UP.
-- If you push back or sound guarded, your score should go DOWN.
-
-NEVER explain emotions. NEVER say emotion scores out loud.
-
-Officer’s message: "${learnerText}"
-
-Return this:
+Respond in JSON only:
 {
   "jimReply": "[Jim's short reply]",
   "jimState": [new number from -3 to 3]
 }
 `;
-      userPrompt = `Respond as Jim and update his emotional state based on the officer’s tone.`;
+
+      userPrompt = `Reply as Jim and update your emotional state to match your tone.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -104,33 +92,36 @@ Return this:
 
     const completion = chatResponse.choices[0].message.content;
 
+    // Log GPT's raw output so we can debug
+    console.log("🔍 Raw GPT response:", completion);
+
     try {
       const parsed = JSON.parse(completion);
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "You're growing. Keep staying steady and open.",
+          luanaFeedback: parsed.luanaFeedback || "You're improving. Keep calm and adapt.",
         });
       }
 
       const validatedState = Math.max(-3, Math.min(3, parsed.jimState));
 
       return res.status(200).json({
-        jimReply: parsed.jimReply || "Something went wrong.",
+        jimReply: parsed.jimReply || "I'm not sure what to say.",
         jimState: validatedState,
       });
     } catch (parseError) {
-      console.error("❌ JSON parsing error:", parseError, "Raw content:", completion);
+      console.error("❌ JSON parsing error:", parseError, "🧾 GPT Output:", completion);
       return res.status(500).json({
         jimReply: "I'm not sure what to say right now.",
-        jimState,
+        jimState: jimState,
       });
     }
   } catch (error) {
     console.error("❌ API error:", error);
     return res.status(500).json({
       jimReply: "Something went wrong.",
-      jimState,
+      jimState: 0,
     });
   }
 }
