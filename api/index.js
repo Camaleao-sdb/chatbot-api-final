@@ -16,7 +16,8 @@ export default async function handler(req, res) {
   try {
     const { role = "Jim", learnerText, jimState = 0, jimReply = "", context = "live" } = req.body;
 
-    if (!learnerText && role === "Jim") {
+    // ✅ Only check for learnerText when role is Jim
+    if (role === "Jim" && !learnerText) {
       return res.status(400).json({
         error: "Missing required field: learnerText",
         jimReply: "I can't understand you.",
