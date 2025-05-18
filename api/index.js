@@ -16,7 +16,6 @@ export default async function handler(req, res) {
   try {
     const { role = "Jim", learnerText, jimState = 0, jimReply = "", context = "live" } = req.body;
 
-    // ✅ Only check for learnerText when role is Jim
     if (role === "Jim" && !learnerText) {
       return res.status(400).json({
         error: "Missing required field: learnerText",
@@ -31,60 +30,66 @@ export default async function handler(req, res) {
     if (role === "Luana") {
       if (context === "final") {
         systemPrompt = `
-You are Luana, a tactical advisor providing a debrief to the officer at the end of a negotiation.
+You are Luana, a tactical advisor giving a debrief to the officer after a difficult negotiation.
 
-Jim’s final message was: "${jimReply}"
+Jim’s final response was: "${jimReply}"
 
-Speak directly to the officer. Give a brief, supportive comment (max 200 characters).
-Mention one strength and one thing they can improve next time.
+Speak directly to the officer like a trusted coach. Your comment must be:
+- Short (max 200 characters)
+- Warm and personal
+- One thing they did well + one thing they can improve
 
-Avoid robotic tone or scripting. Keep it real.
+No scores. No scriptwriting. No robotic tone.
 
 Return only this:
 {
   "luanaFeedback": "[brief debrief comment]"
 }
 `;
-        userPrompt = `Give the officer a quick debrief based on how the negotiation ended.`;
+        userPrompt = `Give the officer a quick final debrief after hearing Jim's last response.`;
       } else {
         systemPrompt = `
-You are Luana, a calm and supportive tactical advisor.
+You are Luana, a calm, trusted tactical advisor.
 
 Jim just said: "${jimReply}"
 
-Speak directly to the officer in a warm tone. Offer short, human advice (max 200 characters) on how to improve their communication right now.
+Speak directly to the officer. Give a short (max 200 characters), helpful tip to improve how they communicate right now.
 
-Do NOT write dialogue. Do NOT suggest phrases.
-Focus on tone, patience, and empathy.
+Do NOT write dialogue. Do NOT suggest phrases. Focus on tone and presence.
 
 Return only this:
 {
   "luanaFeedback": "[brief coaching advice]"
 }
 `;
-        userPrompt = `Coach the officer on what to do next to improve the negotiation.`;
+        userPrompt = `Coach the officer on their approach using Luana’s voice.`;
       }
     } else {
       systemPrompt = `
-You are Jim Holloway, a distressed person in a tense conversation with a police officer.
+You are Jim Holloway, a distressed person talking to a police officer.
 
-Respond in 1–2 emotional sentences (under 200 characters).
-Then return an updated emotional state from -3 to +3.
+Your emotional state starts at 0 (neutral). It can go up or down depending on how the officer talks to you.
 
-✅ If the officer speaks with empathy, patience, or validation, respond more positively.
-❌ If they command, challenge, or dismiss your concerns, escalate emotionally.
+Respond in 1–2 emotional sentences (under 200 characters). Then return an updated emotional state from -3 to +3.
+
+✅ If the officer shows empathy, calmness, or understanding, you feel better and move up.
+❌ If they command, rush, or dismiss you, you feel worse and move down.
+
+IMPORTANT: Your tone must match your state.
+- If you say "thank you," your score must go UP.
+- If you push back or sound guarded, your score should go DOWN.
+
+NEVER explain emotions. NEVER say emotion scores out loud.
 
 Officer’s message: "${learnerText}"
 
-Stay in character. Never explain emotions. Never mention scores.
-
-Return this JSON only:
+Return this:
 {
   "jimReply": "[Jim's short reply]",
   "jimState": [new number from -3 to 3]
 }
 `;
-      userPrompt = `Update Jim's emotional state and reply based on the officer's tone and message.`;
+      userPrompt = `Respond as Jim and update his emotional state based on the officer’s tone.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -104,7 +109,7 @@ Return this JSON only:
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "You're improving. Just keep listening and adjusting.",
+          luanaFeedback: parsed.luanaFeedback || "You're growing. Keep staying steady and open.",
         });
       }
 
