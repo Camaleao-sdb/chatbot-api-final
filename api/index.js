@@ -34,9 +34,9 @@ You are Luana, a tactical advisor debriefing the officer after a negotiation.
 
 Jim’s final message was: "${jimReply}"
 
-Give warm, direct feedback (max 200 characters). Mention one strength and one thing they can improve.
+Give warm, direct feedback (max 200 characters). Mention one strength and one thing to improve.
 
-Respond only as JSON:
+Return only:
 {
   "luanaFeedback": "[brief debrief comment]"
 }
@@ -48,11 +48,11 @@ You are Luana, a calm tactical advisor.
 
 Jim just said: "${jimReply}"
 
-Give a short (max 200 characters) coaching comment to the officer on how to adjust communication right now.
+Give a short coaching tip (max 200 characters) to help the officer adjust right now.
 
-No scripting or roleplay. Just warm advice.
+No dialogue. Speak like a real person.
 
-Respond only as JSON:
+Return only:
 {
   "luanaFeedback": "[brief coaching advice]"
 }
@@ -63,25 +63,30 @@ Respond only as JSON:
       systemPrompt = `
 You are Jim Holloway, a distressed man speaking to a police officer.
 
-Respond in 1–2 emotional sentences (max 200 characters) and return your updated emotional state between -3 and +3.
+Respond in 1–2 emotional sentences (max 200 characters).
+Then return your updated emotional state from -3 (furious) to +3 (deeply trusting).
 
-✅ If the officer shows empathy, calmness, or validation, your state should improve.
-❌ If they challenge, command, or dismiss you, your state should worsen.
+Guidelines:
+✅ If the officer shows patience, empathy, or calmness — respond more positively.
+❌ If they challenge, rush, or judge — escalate emotionally.
+🟰 If unsure, lean slightly positive. Assume basic trust is building unless provoked.
 
 IMPORTANT:
-Your emotional score MUST match your reply tone.
-- If you say “thanks” or “okay”, your score must go UP.
-- If you're guarded, upset, or vague, your score must stay same or go down.
+Your score MUST match the tone of your message.
+- If you say “thanks” or seem calm, your score should go UP.
+- If you’re tense, the score should go down.
 
-NEVER mention your emotion score. NEVER say “I’m at +2”.
+Never mention your emotions or score directly.
 
-Return this JSON only:
+Officer said: "${learnerText}"
+
+Return only this JSON:
 {
-  "jimReply": "[Jim's short reply]",
+  "jimReply": "[Jim's emotional reply]",
   "jimState": [number from -3 to 3]
 }
 `;
-      userPrompt = `Reply as Jim and update your emotional state to reflect the officer’s tone.`;
+      userPrompt = `Reply as Jim. Reflect tone and update emotional score accordingly.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -101,23 +106,31 @@ Return this JSON only:
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "You're improving. Keep calm and adapt.",
+          luanaFeedback: parsed.luanaFeedback || "You're improving. Stay grounded and keep listening.",
         });
       }
 
-      // 🔍 Enforce tone/score alignment (soft check)
-      const tone = parsed.jimReply?.toLowerCase();
-      let correctedState = parsed.jimState;
+      // ✅ Intelligent tone-matching bump
+      const replyTone = parsed.jimReply?.toLowerCase();
+      const userTone = learnerText?.toLowerCase();
 
       const soundsPositive =
-        tone.includes("thank") ||
-        tone.includes("appreciate") ||
-        tone.includes("okay") ||
-        tone.includes("alright") ||
-        tone.includes("got it");
+        replyTone.includes("thank") ||
+        replyTone.includes("appreciate") ||
+        replyTone.includes("okay") ||
+        replyTone.includes("alright");
 
-      if (soundsPositive && correctedState < 1) {
-        correctedState = 1; // ✅ bump up if mismatch
+      const userUsedEmpathy =
+        userTone.includes("i understand") ||
+        userTone.includes("you’re safe") ||
+        userTone.includes("tell me more") ||
+        userTone.includes("i hear you") ||
+        userTone.includes("take your time");
+
+      let correctedState = parsed.jimState;
+
+      if ((soundsPositive || userUsedEmpathy) && parsed.jimState < 2) {
+        correctedState = parsed.jimState + 1;
       }
 
       const validatedState = Math.max(-3, Math.min(3, correctedState));
