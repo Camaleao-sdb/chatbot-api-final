@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+// Initialize the OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -27,49 +28,50 @@ export default async function handler(req, res) {
     if (role === "Luana") {
       if (context === "final") {
         systemPrompt = `
-You are Luana, a tactical advisor debriefing the officer.
+You are Luana, a calm tactical advisor.
 
-Jim’s final message was: "${jimReply}"
+Jim just finished speaking: "${jimReply}"
 
-Give brief feedback (max 200 characters). One strength, one thing to improve.
+Give short, personal debrief (max 200 characters).
+Mention one thing done well and one thing to improve.
 
-Return only:
+Respond only:
 {
-  "luanaFeedback": "[brief debrief comment]"
+  "luanaFeedback": "[brief feedback]"
 }
 `;
-        userPrompt = `Give feedback based on Jim’s final words.`;
+        userPrompt = `Summarize and support the officer’s effort with brief feedback.`;
       } else {
         systemPrompt = `
-You are Luana, a tactical advisor.
+You are Luana, a calm advisor.
 
 Jim just said: "${jimReply}"
 
-Give a quick (max 200 characters) tip to the officer to help them adjust their tone.
+Give one quick coaching tip (max 200 characters) the officer could apply now.
 
-Return only:
+Respond only:
 {
-  "luanaFeedback": "[brief coaching advice]"
+  "luanaFeedback": "[brief coaching tip]"
 }
 `;
-        userPrompt = `Coach the officer based on Jim’s latest message.`;
+        userPrompt = `Give short coaching for what the officer should try next.`;
       }
     } else {
       systemPrompt = `
-You are Jim Holloway, a distressed man speaking with a police officer.
-
-Respond in 1–2 emotional sentences (max 200 characters).
-Then return your updated emotional state from -3 to +3.
+You are Jim Holloway, a distressed man.
 
 Officer said: "${learnerText}"
 
-Return only:
+Reply in 1–2 emotional sentences (under 200 characters).
+Then return your new emotional state from -3 (furious) to +3 (relieved).
+
+Respond only:
 {
   "jimReply": "[Jim's reply]",
   "jimState": [number from -3 to 3]
 }
 `;
-      userPrompt = `Respond as Jim and update your state.`;
+      userPrompt = `Reply as Jim and give your new emotional state.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -84,12 +86,15 @@ Return only:
 
     const completion = chatResponse.choices[0].message.content;
 
+    // 🧪 DEBUG: Show GPT's full response before parsing
+    console.log("🧾 GPT Raw Completion:", completion);
+
     try {
       const parsed = JSON.parse(completion);
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "Good effort. Keep your tone steady and let him speak.",
+          luanaFeedback: parsed.luanaFeedback || "You stayed steady. Try listening a little longer before responding.",
         });
       }
 
@@ -97,13 +102,22 @@ Return only:
         jimReply: parsed.jimReply || "I'm not sure what to say.",
         jimState: Math.max(-3, Math.min(3, parsed.jimState)),
       });
-    } catch {
-      return res.status(500).json({
-        jimReply: "I'm not sure what to say right now.",
+    } catch (parseError) {
+      console.error("❌ JSON parsing error:", parseError, "🧾 GPT Output:", completion);
+
+      if (role === "Luana") {
+        return res.status(200).json({
+          luanaFeedback: "I'm here if you need guidance.",
+        });
+      }
+
+      return res.status(200).json({
+        jimReply: "Something went wrong, but I’m trying to stay calm.",
         jimState: jimState,
       });
     }
-  } catch {
+  } catch (error) {
+    console.error("❌ API error:", error);
     return res.status(500).json({
       jimReply: "Something went wrong.",
       jimState: 0,
