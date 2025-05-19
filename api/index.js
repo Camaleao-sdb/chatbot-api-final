@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 
-// Initialize the OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -22,69 +21,55 @@ export default async function handler(req, res) {
       context = "live"
     } = req.body;
 
-    if (role === "Jim" && !learnerText) {
-      return res.status(400).json({
-        error: "Missing required field: learnerText",
-        jimReply: "I can't understand you.",
-        jimState,
-      });
-    }
-
     let systemPrompt;
     let userPrompt;
 
     if (role === "Luana") {
       if (context === "final") {
         systemPrompt = `
-You are Luana, a calm and supportive tactical advisor giving a debrief to a junior officer.
+You are Luana, a tactical advisor debriefing the officer.
 
-Jim’s final words were: "${jimReply}"
+Jim’s final message was: "${jimReply}"
 
-Give warm, encouraging feedback (max 200 characters). Highlight one strength and one improvement point.
+Give brief feedback (max 200 characters). One strength, one thing to improve.
 
 Return only:
 {
   "luanaFeedback": "[brief debrief comment]"
 }
 `;
-        userPrompt = `Give a short debrief based on Jim’s final reply.`;
+        userPrompt = `Give feedback based on Jim’s final words.`;
       } else {
         systemPrompt = `
-You are Luana, a calm and trusted tactical advisor.
+You are Luana, a tactical advisor.
 
 Jim just said: "${jimReply}"
 
-Speak directly to the officer (max 200 characters).
-Offer a quick, human coaching tip — how to adjust tone, pacing, or empathy.
+Give a quick (max 200 characters) tip to the officer to help them adjust their tone.
 
 Return only:
 {
   "luanaFeedback": "[brief coaching advice]"
 }
 `;
-        userPrompt = `Give brief, in-the-moment coaching to the officer.`;
+        userPrompt = `Coach the officer based on Jim’s latest message.`;
       }
     } else {
       systemPrompt = `
-You are Jim Holloway, a distressed man in a tense conversation with a police officer.
+You are Jim Holloway, a distressed man speaking with a police officer.
 
-Reply in 1–2 emotional sentences (max 200 characters).
+Respond in 1–2 emotional sentences (max 200 characters).
 Then return your updated emotional state from -3 to +3.
-
-✅ If the officer sounds calm, understanding, or patient — respond more positively.
-❌ If they rush, pressure, or talk down — sound more closed or upset.
-
-Match your tone to your score. Never mention your emotions or score directly.
 
 Officer said: "${learnerText}"
 
 Return only:
 {
-  "jimReply": "[Jim's emotional reply]",
+  "jimReply": "[Jim's reply]",
   "jimState": [number from -3 to 3]
 }
 `;
-      userPrompt = `Reply as Jim and update your emotional state to reflect the officer’s message.`;
+      userPrompt = `Respond as Jim and update your state.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -104,26 +89,24 @@ Return only:
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "You're steady under pressure. Try softening your delivery next time.",
+          luanaFeedback: parsed.luanaFeedback || "Good effort. Keep your tone steady and let him speak.",
         });
       }
 
-      const validatedState = Math.max(-3, Math.min(3, parsed.jimState));
-
       return res.status(200).json({
         jimReply: parsed.jimReply || "I'm not sure what to say.",
-        jimState: validatedState,
+        jimState: Math.max(-3, Math.min(3, parsed.jimState)),
       });
-    } catch (parseError) {
+    } catch {
       return res.status(500).json({
         jimReply: "I'm not sure what to say right now.",
         jimState: jimState,
       });
     }
-  } catch (error) {
+  } catch {
     return res.status(500).json({
       jimReply: "Something went wrong.",
-      jimState: jimState,
+      jimState: 0,
     });
   }
 }
