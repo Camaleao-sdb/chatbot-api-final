@@ -16,20 +16,11 @@ export default async function handler(req, res) {
   try {
     const {
       role = "Jim",
-      learnerText = "", // ✅ Fallback in case it's undefined
+      learnerText = "",
       jimState = 0,
       jimReply = "",
       context = "live"
     } = req.body;
-
-    // 🔵 Log every incoming request
-    console.log("🔵 API called with:", {
-      role,
-      context,
-      learnerText,
-      jimState,
-      jimReply
-    });
 
     if (role === "Jim" && !learnerText) {
       return res.status(400).json({
@@ -45,55 +36,47 @@ export default async function handler(req, res) {
     if (role === "Luana") {
       if (context === "final") {
         systemPrompt = `
-You are Luana, a tactical advisor giving a debrief to the officer after a negotiation.
+You are Luana, a calm and supportive tactical advisor giving a debrief to a junior officer.
 
-Jim’s final message was: "${jimReply}"
+Jim’s final words were: "${jimReply}"
 
-Speak directly to the officer in a warm, human tone (max 200 characters).
-Mention one thing they did well and one thing to improve.
+Give warm, encouraging feedback (max 200 characters). Highlight one strength and one improvement point.
 
-Avoid robotic phrases. Be supportive and specific.
-
-Respond only:
+Return only:
 {
   "luanaFeedback": "[brief debrief comment]"
 }
 `;
-        userPrompt = `Give the officer a debrief that feels personal and supportive.`;
+        userPrompt = `Give a short debrief based on Jim’s final reply.`;
       } else {
         systemPrompt = `
-You are Luana, a calm tactical advisor offering live coaching.
+You are Luana, a calm and trusted tactical advisor.
 
 Jim just said: "${jimReply}"
 
 Speak directly to the officer (max 200 characters).
-Give one short, helpful suggestion about how they could adjust their tone, pace, or empathy.
+Offer a quick, human coaching tip — how to adjust tone, pacing, or empathy.
 
-Avoid generic tips or scripts. Be present and real.
-
-Respond only:
+Return only:
 {
   "luanaFeedback": "[brief coaching advice]"
 }
 `;
-        userPrompt = `Coach the officer in a personal, natural way.`;
+        userPrompt = `Give brief, in-the-moment coaching to the officer.`;
       }
     } else {
       systemPrompt = `
-You are Jim Holloway, a distressed civilian in a tense interaction with a police officer.
+You are Jim Holloway, a distressed man in a tense conversation with a police officer.
 
-Respond with 1–2 short, emotional sentences (max 200 characters), and return an updated emotional state from -3 to +3.
+Reply in 1–2 emotional sentences (max 200 characters).
+Then return your updated emotional state from -3 to +3.
 
-✅ If the officer shows empathy, calmness, or validation, your response should sound more trusting or relieved.
-❌ If they rush, judge, or pressure you, your tone should sound guarded or defensive.
+✅ If the officer sounds calm, understanding, or patient — respond more positively.
+❌ If they rush, pressure, or talk down — sound more closed or upset.
 
-🟰 If unsure, default to slightly positive — but only if there's some trust.
+Match your tone to your score. Never mention your emotions or score directly.
 
-IMPORTANT:
-- Match tone and score. Thankful = score goes UP. Guarded = score stays same or drops.
-- Never describe your emotion or mention a score.
-
-Officer's message: "${learnerText}"
+Officer said: "${learnerText}"
 
 Return only:
 {
@@ -101,7 +84,7 @@ Return only:
   "jimState": [number from -3 to 3]
 }
 `;
-      userPrompt = `Respond in character and update emotional state realistically.`;
+      userPrompt = `Reply as Jim and update your emotional state to reflect the officer’s message.`;
     }
 
     const chatResponse = await openai.chat.completions.create({
@@ -121,54 +104,26 @@ Return only:
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "You're steady under pressure. Just remember to give space before speaking.",
+          luanaFeedback: parsed.luanaFeedback || "You're steady under pressure. Try softening your delivery next time.",
         });
       }
 
-      // 🧠 Tone alignment & state adjustment
-      const replyTone = parsed.jimReply?.toLowerCase();
-      const userTone = learnerText?.toLowerCase();
-
-      const soundsPositive =
-        replyTone.includes("thank") ||
-        replyTone.includes("appreciate") ||
-        replyTone.includes("okay") ||
-        replyTone.includes("alright");
-
-      const userUsedEmpathy =
-        userTone.includes("i understand") ||
-        userTone.includes("you’re safe") ||
-        userTone.includes("tell me more") ||
-        userTone.includes("i hear you") ||
-        userTone.includes("take your time");
-
-      let correctedState = parsed.jimState;
-
-      if (soundsPositive && userUsedEmpathy && correctedState < 2) {
-        correctedState = correctedState + 1;
-        console.log("✅ Score bumped due to empathy + positive tone.");
-      } else {
-        console.log("ℹ️ No score bump. Tone mismatch or low trust.");
-      }
-
-      const validatedState = Math.max(-3, Math.min(3, correctedState));
+      const validatedState = Math.max(-3, Math.min(3, parsed.jimState));
 
       return res.status(200).json({
         jimReply: parsed.jimReply || "I'm not sure what to say.",
         jimState: validatedState,
       });
     } catch (parseError) {
-      console.error("❌ JSON parsing error:", parseError, "🧾 GPT Output:", completion);
       return res.status(500).json({
         jimReply: "I'm not sure what to say right now.",
-        jimState,
+        jimState: jimState,
       });
     }
   } catch (error) {
-    console.error("❌ API error:", error);
     return res.status(500).json({
       jimReply: "Something went wrong.",
-      jimState,
+      jimState: jimState,
     });
   }
 }
