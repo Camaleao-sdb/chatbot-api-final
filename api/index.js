@@ -14,7 +14,22 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { role = "Jim", learnerText, jimState = 0, jimReply = "", context = "live" } = req.body;
+    const {
+      role = "Jim",
+      learnerText = "", // ✅ Fallback in case it's undefined
+      jimState = 0,
+      jimReply = "",
+      context = "live"
+    } = req.body;
+
+    // 🔵 Log every incoming request
+    console.log("🔵 API called with:", {
+      role,
+      context,
+      learnerText,
+      jimState,
+      jimReply
+    });
 
     if (role === "Jim" && !learnerText) {
       return res.status(400).json({
