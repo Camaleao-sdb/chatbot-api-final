@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 
-// Initialize the OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -74,19 +73,28 @@ Respond only:
       userPrompt = `Reply as Jim and give your new emotional state.`;
     }
 
-    const chatResponse = await openai.chat.completions.create({
+    const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.85,
-      response_format: { type: "json_object" },
+      response_format: "json_object", // safest structure
     });
 
-    const completion = chatResponse.choices[0].message.content;
+    // Failsafe: Check for content
+    const completion = response.choices?.[0]?.message?.content;
 
-    // 🧪 DEBUG: Show GPT's full response before parsing
+    if (!completion) {
+      console.error("❌ No content returned from GPT");
+      return res.status(500).json({
+        jimReply: "Something went wrong (no reply).",
+        jimState,
+      });
+    }
+
+    // Log it for debugging
     console.log("🧾 GPT Raw Completion:", completion);
 
     try {
@@ -94,7 +102,8 @@ Respond only:
 
       if (role === "Luana") {
         return res.status(200).json({
-          luanaFeedback: parsed.luanaFeedback || "You stayed steady. Try listening a little longer before responding.",
+          luanaFeedback:
+            parsed.luanaFeedback || "You stayed steady. Try listening a little longer before responding.",
         });
       }
 
@@ -113,7 +122,7 @@ Respond only:
 
       return res.status(200).json({
         jimReply: "Something went wrong, but I’m trying to stay calm.",
-        jimState: jimState,
+        jimState,
       });
     }
   } catch (error) {
